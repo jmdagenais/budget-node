@@ -17,42 +17,50 @@ const loginThrottler = new LoginThrottler();
 
 export class JwtAuthService implements AuthService<Token> {
 
+  constructor(private userRepository: UserRepository, private loginThrottler: LoginThrottler) {
+
+  }
+
   authenticate() {
     return passport.authenticate('jwt', { session: false });
   }
 
   login(loginRequest: AuthRequest): Promise<Token> {
     const email = loginRequest.email;
-    return userRepository.getUserByEmail(email).then(user => {
+    console.log(email)
+    return this.userRepository.getUserByEmail(email).then(user => {
 
       return loginThrottler.isLoginBlocked(email).then(isBlocked => {
         if (isBlocked) {
-          log.warn('auth.jwt_login_failed.user_blocked', {email});
+          log.warn('auth.jwt_login_failed.user_blocked', { email });
           throw `Login blocked. Please try in ${CONFIG.loginThrottle.timeWindowInMinutes} minutes`;
         } else {
+          console.log(user.password);
+
           return bcrypt.compare(loginRequest.password, user.password!).then(match => {
+            console.log(match)
             if (match && user.confirmed) {
-            
+
               const token = createSignedToken(user);
-              log.info('auth.jwt_login_successful', {user});
+              log.info('auth.jwt_login_successful', { user });
               return { jwt: token };
-            
+
             } else if (match && !user.confirmed) {
-            
-              log.info('auth.jwt_login_failed.not_confirmed', {user});
+
+              log.info('auth.jwt_login_failed.not_confirmed', { user });
               return Promise.reject('Please confirm your user profile');
-            
+
             } else {
-    
+
               loginThrottler.registerLoginFailure(email);
-              log.info('auth.jwt_login_failed.wrong_password', {user});
+              log.info('auth.jwt_login_failed.wrong_password', { user });
               return Promise.reject();
-    
+
             }
           });
         }
       });
-      
+
     });
   }
 
